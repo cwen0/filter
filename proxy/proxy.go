@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cwen0/filter/filter/kv"
+	"github.com/cwen0/filter/pkg/kv"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"google.golang.org/grpc"
@@ -58,7 +58,7 @@ func (p *ProxyHandler) handler(srv interface{}, serverStream grpc.ServerStream) 
 	}
 	log.Infof("full name %s", fullMethodName)
 	if err := p.kvFilter.KVGet(p.ctx, fullMethodName); err != nil {
-		return grpc.Errorf(codes.Internal, "exec kv filter failed")
+		return grpc.Errorf(codes.Internal, "exec kv pkg failed")
 	}
 
 	clientStream, err := grpc.NewClientStream(p.ctx, clientStreamDescForProxying, p.upstreamConn, fullMethodName)
