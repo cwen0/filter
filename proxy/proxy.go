@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/cwen0/filter/pkg/kv"
 	"github.com/juju/errors"
 	"github.com/ngaut/log"
 	"google.golang.org/grpc"
@@ -26,7 +25,7 @@ type ProxyHandler struct {
 	cfg          map[string]string
 	upstream     string
 	upstreamConn *grpc.ClientConn
-	kvFilter     *kv.Filter
+	kvFilter     *KVFilter
 }
 
 // NewProxyHandler creates new proxy handler
@@ -57,15 +56,8 @@ func (p *ProxyHandler) handler(srv interface{}, serverStream grpc.ServerStream) 
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	log.Infof("full name %s", fullMethodName)
-	// We require that the director's returned context inherits from the serverStream.Context().
-	outgoingCtx, backendConn, err := p.kvFilter.KVGet(serverStream.Context(), fullMethodName, Codec())
-	if err != nil {
-		return err
-	}
 
-	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
-
-	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
+	clientStream, err := grpc.NewClientStream(p.ctx, clientStreamDescForProxying, p.upstreamConn, fullMethodName)
 	if err != nil {
 		return err
 	}
@@ -86,7 +78,6 @@ func (p *ProxyHandler) handler(srv interface{}, serverStream grpc.ServerStream) 
 				// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 				// exit with an error to the stack
-				clientCancel()
 				return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 			}
 		case c2sErr := <-c2sErrChan:
@@ -153,17 +144,23 @@ func (p *ProxyHandler) forwardServerToClient(src grpc.ServerStream, dst grpc.Cli
 
 // handlerRequest try to apply config
 func (p *ProxyHandler) handlerRequest(src grpc.ServerStream, dst grpc.ClientStream) error {
-	methodName, ok := grpc.MethodFromServerStream(src)
+	_, ok := grpc.MethodFromServerStream(src)
 	if !ok {
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 
-	rule, ok := p.cfg[methodName]
-	if !ok {
-		return p.processNormal(src, dst)
+	if err := p.kvFilter.KVGet(src, dst); err != nil {
+		return err
 	}
 
-	return p.processWithRule(src, dst, rule)
+	return nil
+
+	// rule, ok := p.cfg[methodName]
+	// if !ok {
+	// 	return p.processNormal(src, dst)
+	// }
+
+	// return p.processWithRule(src, dst, rule)
 }
 
 func (p *ProxyHandler) processNormal(src grpc.ServerStream, dst grpc.ClientStream) error {
