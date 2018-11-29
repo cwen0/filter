@@ -57,11 +57,15 @@ func (p *ProxyHandler) handler(srv interface{}, serverStream grpc.ServerStream) 
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
 	log.Infof("full name %s", fullMethodName)
-	if err := p.kvFilter.KVGet(p.ctx, fullMethodName); err != nil {
-		return grpc.Errorf(codes.Internal, "exec kv pkg failed")
+	// We require that the director's returned context inherits from the serverStream.Context().
+	outgoingCtx, backendConn, err := p.kvFilter.KVGet(serverStream.Context(), fullMethodName, Codec())
+	if err != nil {
+		return err
 	}
 
-	clientStream, err := grpc.NewClientStream(p.ctx, clientStreamDescForProxying, p.upstreamConn, fullMethodName)
+	clientCtx, clientCancel := context.WithCancel(outgoingCtx)
+
+	clientStream, err := grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName)
 	if err != nil {
 		return err
 	}
@@ -82,6 +86,7 @@ func (p *ProxyHandler) handler(srv interface{}, serverStream grpc.ServerStream) 
 				// however, we may have gotten a receive error (stream disconnected, a read error etc) in which case we need
 				// to cancel the clientStream to the backend, let all of its goroutines be freed up by the CancelFunc and
 				// exit with an error to the stack
+				clientCancel()
 				return grpc.Errorf(codes.Internal, "failed proxying s2c: %v", s2cErr)
 			}
 		case c2sErr := <-c2sErrChan:
