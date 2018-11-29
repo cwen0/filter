@@ -4,7 +4,7 @@ GOTEST=GO15VENDOREXPERIMENT="1" CGO_ENABLED=0 GO111MODULE=on go test
 
 default: build
 
-build: filter
+build: proxy
 
 filter:
 	$(GOBUILD) -o bin/filter cmd/filter/*.go

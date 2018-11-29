@@ -3,26 +3,41 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"net"
 
-	"google.golang.org/grpc"
-
 	"github.com/cwen0/filter/proxy"
+	"github.com/ngaut/log"
+	"google.golang.org/grpc"
 )
 
 var (
 	upstream   string
 	listenAddr string
+	logFile    string
+	logLevel   string
 )
 
 func init() {
 	flag.StringVar(&upstream, "upstream", "127.0.0.1:11000", "upstream port")
-	flag.StringVar(&listenAddr, "listen-addr", ":10000", "serve port")
+	flag.StringVar(&listenAddr, "listen-addr", "127.0.0.1:11111", "serve port")
+	flag.StringVar(&logFile, "log-file", "", "agent log file")
+	flag.StringVar(&logLevel, "log-level", "info", "agent log level: info, warn, fatal, error")
+}
+
+func initLogger() {
+	log.SetLevelByString(logLevel)
+
+	if len(logFile) > 0 {
+		log.SetOutputByName(logFile)
+		log.SetRotateByDay()
+	}
 }
 
 func main() {
 	flag.Parse()
+
+	initLogger()
+
 	lis, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)

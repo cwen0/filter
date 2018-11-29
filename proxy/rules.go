@@ -2,8 +2,9 @@ package proxy
 
 
 import (
-	"log"
 	"strings"
+
+	"github.com/ngaut/log"
 )
 
 // Rule is rule
@@ -37,7 +38,7 @@ func stringToRule(ruleStr string) *Rule {
 		} else {
 			arr := strings.SplitN(item, "(", 2)
 			rule.Action = arr[0]
-			log.Print(arr[1])
+			log.Info(arr[1])
 			rule.ActionArgs = strings.Split(arr[1], ")")[0]
 		}
 	}

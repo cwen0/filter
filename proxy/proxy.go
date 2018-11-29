@@ -3,11 +3,12 @@ package proxy
 import (
 	"context"
 	"io"
-	"log"
 	"strconv"
 	"time"
 
+	"github.com/cwen0/filter/filter/kv"
 	"github.com/juju/errors"
+	"github.com/ngaut/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 )
@@ -25,6 +26,7 @@ type ProxyHandler struct {
 	cfg          map[string]string
 	upstream     string
 	upstreamConn *grpc.ClientConn
+	kvFilter     *kv.Filter
 }
 
 // NewProxyHandler creates new proxy handler
@@ -54,7 +56,11 @@ func (p *ProxyHandler) handler(srv interface{}, serverStream grpc.ServerStream) 
 	if !ok {
 		return grpc.Errorf(codes.Internal, "lowLevelServerStream not exists in context")
 	}
-	log.Printf("full name %s", fullMethodName)
+	log.Infof("full name %s", fullMethodName)
+	if err := p.kvFilter.KVGet(p.ctx, fullMethodName); err != nil {
+		return grpc.Errorf(codes.Internal, "exec kv filter failed")
+	}
+
 	clientStream, err := grpc.NewClientStream(p.ctx, clientStreamDescForProxying, p.upstreamConn, fullMethodName)
 	if err != nil {
 		return err
@@ -131,7 +137,7 @@ func (p *ProxyHandler) forwardServerToClient(src grpc.ServerStream, dst grpc.Cli
 		for i := 0; ; i++ {
 			err := p.handlerRequest(src, dst)
 			if err != nil {
-				log.Printf("got error %s", errors.ErrorStack(err))
+				log.Infof("got error %s", errors.ErrorStack(err))
 				ret <- err
 				break
 			}
@@ -181,7 +187,7 @@ func (p *ProxyHandler) processWithRule(src grpc.ServerStream, dst grpc.ClientStr
 			if err != nil {
 				return errors.Trace(err)
 			}
-			log.Printf("sleep %d ms", millisecond)
+			log.Infof("sleep %d ms", millisecond)
 			time.Sleep(time.Duration(millisecond) * time.Millisecond)
 		}
 	}
